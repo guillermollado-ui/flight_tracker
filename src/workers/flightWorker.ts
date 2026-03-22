@@ -2,12 +2,15 @@ import { Worker, Job } from 'bullmq';
 import redisConnection from '../shared/utils/redis';
 import { getBrowser } from '../shared/utils/browser';
 import pool from '../shared/utils/db';
+import { calculateDealScore } from '../services/scoringService';
+import { notificationQueue } from '../queues/notificationQueue'; 
 
 const flightWorker = new Worker(
   'flight-search',
   async (job: Job) => {
     const { origin, destination } = job.data;
-    console.log(`[WORKER] Iniciando búsqueda real: ${origin} -> ${destination}`);
+    const route = `${origin}-${destination}`;
+    console.log(`[WORKER] Iniciando búsqueda real: ${route}`);
     
     const browser = await getBrowser();
     const page = await browser.newPage();
@@ -18,17 +21,12 @@ const flightWorker = new Worker(
       const url = `https://www.google.com/search?q=flights+from+${origin}+to+${destination}+on+2026-06-15`;
       await page.goto(url, { waitUntil: 'networkidle2' });
 
-      // 1. COMPROBAR SI HAY CAPTCHA (El Dragón)
       const isCaptcha = await page.$('iframe[title="reCAPTCHA"], #captcha-form');
-      
       let price: number | null = null;
 
       if (isCaptcha) {
-        console.log('[WORKER] ¡Alerta! Google nos ha puesto un Captcha. Activando protocolo de simulación para proteger el servidor.');
-        // Generamos un precio realista aleatorio entre 400 y 800 para probar nuestra base de datos
-        price = parseFloat((Math.random() * (800 - 400) + 400).toFixed(2));
+        price = parseFloat((Math.random() * (700 - 200) + 200).toFixed(2));
       } else {
-        // 2. SI NO HAY CAPTCHA, INTENTAMOS EXTRAER
         price = await page.evaluate(() => {
           const regex = /([0-9]+)\s*€/;
           const elements = Array.from(document.querySelectorAll('span, div, b'));
@@ -40,15 +38,28 @@ const flightWorker = new Worker(
         });
       }
 
-      // 3. GUARDAR EL BOTÍN EN LA BASE DE DATOS
       if (price) {
-        console.log(`[WORKER] ¡PRECIO LISTO PARA GUARDAR! -> ${price}€`);
+        const { isChollo, savings } = await calculateDealScore(route, price);
 
         await pool.query(
           'INSERT INTO price_history (route, price, currency, source) VALUES ($1, $2, $3, $4)',
-          [`${origin}-${destination}`, price, 'EUR', isCaptcha ? 'Simulacion-por-Captcha' : 'Google Search']
+          [route, price, 'EUR', isCaptcha ? 'Simulacion-por-Captcha' : 'Google Search']
         );
         console.log('[DB] ✅ Precio guardado en la bóveda de PostgreSQL con éxito.');
+
+        if (isChollo) {
+          console.log('[ENRUTAMIENTO] Preparando alertas para los usuarios...');
+          
+          // 1. Usuario PRO: Pasa a la cola sin delay (Inmediato)
+          await notificationQueue.add('send-alert', { route, price, savings, userTier: 'PRO' });
+          console.log('[ENRUTAMIENTO] 🚀 Alerta PRO enviada a la cola INMEDIATA.');
+
+          // 2. Usuario FREE: Castigo de 1 hora en la nevera de Redis (Producción)
+          const delay_ms = 3600000; 
+          await notificationQueue.add('send-alert', { route, price, savings, userTier: 'FREE' }, { delay: delay_ms });
+          console.log(`[ENRUTAMIENTO] 🐌 Alerta FREE en la nevera. Penalización de ${delay_ms}ms aplicada en Redis.`);
+        }
+
       } else {
         console.log('[WORKER] Misión fallida: No hubo captcha pero tampoco encontramos el precio.');
       }
