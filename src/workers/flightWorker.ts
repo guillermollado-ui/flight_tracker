@@ -50,6 +50,13 @@ const flightWorker = new Worker(
         if (isChollo) {
           console.log('[ENRUTAMIENTO] Preparando alertas para los usuarios...');
           
+          // 💰 NUEVO: Sumar el ahorro al perfil del usuario PRO
+          await pool.query(
+            'UPDATE users SET accumulated_savings = accumulated_savings + $1 WHERE email = $2',
+            [savings, 'titan@radar.com']
+          );
+          console.log(`[PERFIL] 💰 Se han sumado ${savings.toFixed(2)}€ a tu contador de ahorro acumulado.`);
+
           // 1. Usuario PRO: Pasa a la cola sin delay (Inmediato)
           await notificationQueue.add('send-alert', { route, price, savings, userTier: 'PRO' });
           console.log('[ENRUTAMIENTO] 🚀 Alerta PRO enviada a la cola INMEDIATA.');

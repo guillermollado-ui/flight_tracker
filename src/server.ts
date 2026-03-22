@@ -20,7 +20,7 @@ app.get('/', (req: Request, res: Response) => {
   res.status(200).json({ status: 'online', message: 'Radar de Ineficiencias Aéreas operando.' });
 });
 
-// 🛠️ RUTA DE EXPANSIÓN: Construye las nuevas tablas en la bóveda
+// RUTA DE EXPANSIÓN: Construye las nuevas tablas en la bóveda
 app.get('/api/setup-db', async (req: Request, res: Response) => {
   try {
     await pool.query(`
@@ -42,7 +42,6 @@ app.get('/api/setup-db', async (req: Request, res: Response) => {
       );
     `);
     
-    // Creamos un usuario de prueba (Tú) para empezar a guardar tu dinero acumulado
     await pool.query(`
       INSERT INTO users (email, tier) 
       VALUES ('titan@radar.com', 'PRO') 
@@ -56,7 +55,22 @@ app.get('/api/setup-db', async (req: Request, res: Response) => {
   }
 });
 
-// 📱 NUEVO ENDPOINT: La App pide la lista de "Mis Alertas"
+// 📱 NUEVO ENDPOINT: El Radar (Top 20 Oportunidades)
+app.get('/api/radar', async (req: Request, res: Response) => {
+  try {
+    // Traemos los vuelos más baratos registrados recientemente para llenar la pantalla principal
+    const result = await pool.query(`
+      SELECT * FROM price_history 
+      ORDER BY price ASC, created_at DESC 
+      LIMIT 20
+    `);
+    res.status(200).json({ status: 'success', radar: result.rows });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: 'Error al cargar el Radar.' });
+  }
+});
+
+// 📱 ENDPOINT: Mis Alertas
 app.get('/api/alerts/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
@@ -67,7 +81,7 @@ app.get('/api/alerts/:userId', async (req: Request, res: Response) => {
   }
 });
 
-// 📱 NUEVO ENDPOINT: La App crea una "Nueva Alerta"
+// 📱 ENDPOINT: Crear Nueva Alerta
 app.post('/api/alerts', async (req: Request, res: Response) => {
   try {
     const { userId, origin, destination, targetPrice } = req.body;
