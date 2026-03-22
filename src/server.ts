@@ -1,12 +1,12 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import pool from './shared/utils/db.js';
-import redisConnection from './shared/utils/redis.js';
-import { flightQueue } from './queues/flightQueue.js';
-import './workers/flightWorker.js'; 
-import './workers/notificationWorker.js'; 
-import { startCronJobs } from './cron/flightCron.js'; 
+import pool from './shared/utils/db';
+import redisConnection from './shared/utils/redis';
+import { flightQueue } from './queues/flightQueue';
+import './workers/flightWorker'; 
+import './workers/notificationWorker'; 
+import { startCronJobs } from './cron/flightCron'; 
 
 dotenv.config();
 
