@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import pool from './shared/utils/db';
 import redisConnection from './shared/utils/redis';
 import { flightQueue } from './queues/flightQueue';
-import { calculateDealScore } from './services/scoringservice'; // <-- CEREBRO IMPORTADO
+import { calculateDealScore } from './services/scoringService'; // <-- CORRECCIÓN: "S" mayúscula
 import './workers/flightWorker'; 
 import './workers/notificationWorker'; 
 import { startCronJobs } from './cron/flightCron'; 
