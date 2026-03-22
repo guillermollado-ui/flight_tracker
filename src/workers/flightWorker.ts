@@ -1,30 +1,42 @@
 import { Worker, Job } from 'bullmq';
 import redisConnection from '../shared/utils/redis';
+import { getBrowser } from '../shared/utils/browser';
 
-// Este es el "cerebro" que procesará cada vuelo
 const flightWorker = new Worker(
-  'flight-search', // Debe ser el mismo nombre que la Queue
+  'flight-search',
   async (job: Job) => {
-    console.log(`[WORKER] Infiltrado trabajando en el Vuelo ID: ${job.id}`);
-    console.log(`[WORKER] Datos recibidos:`, job.data);
-
-    // Aquí es donde en el futuro irá el Scraper real.
-    // De momento, simulamos una búsqueda de 3 segundos.
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-
-    console.log(`[WORKER] ¡Misión cumplida! Vuelo ${job.data.origin} -> ${job.data.destination} procesado.`);
+    console.log(`[WORKER] Infiltrado iniciando misión para Vuelo ID: ${job.id}`);
     
-    return { success: true, saved: 150.50 }; // Simulamos un ahorro
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+
+    try {
+      // Configuramos un User-Agent humano para despistar
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+      const url = `https://www.google.com/travel/flights?q=Flights%20to%20${job.data.destination}%20from%20${job.data.origin}%20on%202026-05-15`;
+      
+      console.log(`[WORKER] Navegando a: ${url}`);
+      
+      // Vamos a la web y esperamos a que cargue el contenido principal
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+
+      // Hacemos una captura de pantalla para demostrar que hemos entrado
+      // Se guardará en la raíz de tu proyecto como 'ultimo_vuelo.png'
+      await page.screenshot({ path: 'ultimo_vuelo.png' });
+
+      console.log(`[WORKER] ¡Misión cumplida! Captura guardada como ultimo_vuelo.png`);
+      
+      await browser.close();
+      return { success: true, screenshot: 'ultimo_vuelo.png' };
+
+    } catch (error) {
+      console.error('[WORKER ERROR] Fallo en la navegación:', error);
+      await browser.close();
+      throw error;
+    }
   },
   { connection: redisConnection }
 );
-
-flightWorker.on('completed', (job) => {
-  console.log(`[WORKER] Trabajo ${job.id} finalizado con éxito.`);
-});
-
-flightWorker.on('failed', (job, err) => {
-  console.error(`[WORKER ERROR] El trabajo ${job?.id} ha fallado:`, err);
-});
 
 export default flightWorker;
