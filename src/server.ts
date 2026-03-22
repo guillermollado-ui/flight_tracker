@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pool from './shared/utils/db';
+import redisConnection from './shared/utils/redis';
 
 dotenv.config();
 
@@ -35,6 +36,23 @@ app.get('/health/db', async (req: Request, res: Response) => {
     res.status(500).json({
       status: 'database_error',
       error: 'No se pudo conectar a PostgreSQL'
+    });
+  }
+});
+
+// Endpoint táctico para verificar la conexión a Redis (La Sala de Espera)
+app.get('/health/redis', async (req: Request, res: Response) => {
+  try {
+    await redisConnection.ping();
+    res.status(200).json({
+      status: 'redis_connected',
+      message: 'Conexión a Upstash (Redis) establecida con éxito. Sala de espera lista.'
+    });
+  } catch (error) {
+    console.error('[REDIS ERROR] Error conectando a Redis:', error);
+    res.status(500).json({
+      status: 'redis_error',
+      error: 'No se pudo conectar a Upstash'
     });
   }
 });
