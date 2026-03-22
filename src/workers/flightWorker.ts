@@ -39,36 +39,42 @@ const flightWorker = new Worker(
       }
 
       if (price) {
-        const { isChollo, savings } = await calculateDealScore(route, price);
+        // 📈 EXTRAEMOS TODA LA INTELIGENCIA FINANCIERA
+        const { isChollo, savings, dealScore, volatility, arbitrage } = await calculateDealScore(route, price);
 
+        // 1. GUARDAMOS EN LA BÓVEDA
         await pool.query(
           'INSERT INTO price_history (route, price, currency, source) VALUES ($1, $2, $3, $4)',
           [route, price, 'EUR', isCaptcha ? 'Simulacion-por-Captcha' : 'Google Search']
         );
-        console.log('[DB] ✅ Precio guardado en la bóveda de PostgreSQL con éxito.');
+        console.log('[DB] ✅ Precio guardado en la bóveda de PostgreSQL.');
+
+        // 📊 LOGS DE ANÁLISIS ESTILO BLOOMBERG
+        console.log(`[ANALYSIS] 📊 Ruta: ${route} | Score: ${dealScore} | Volatilidad: ${volatility}`);
+        console.log(`[ARBITRAGE] 🌍 Simulación:`, arbitrage.map(a => `${a.country}: ${a.price}${a.currency}`).join(' | '));
 
         if (isChollo) {
-          console.log('[ENRUTAMIENTO] Preparando alertas para los usuarios...');
+          console.log('[ENRUTAMIENTO] 🔥 ¡ALERTA DE CHOLLO DETECTADA! 🔥');
           
-          // 💰 NUEVO: Sumar el ahorro al perfil del usuario PRO
+          // 💰 SUMAR EL AHORRO AL PERFIL DEL USUARIO PRO
           await pool.query(
             'UPDATE users SET accumulated_savings = accumulated_savings + $1 WHERE email = $2',
             [savings, 'titan@radar.com']
           );
           console.log(`[PERFIL] 💰 Se han sumado ${savings.toFixed(2)}€ a tu contador de ahorro acumulado.`);
 
-          // 1. Usuario PRO: Pasa a la cola sin delay (Inmediato)
+          // 1. Usuario PRO: Inmediato
           await notificationQueue.add('send-alert', { route, price, savings, userTier: 'PRO' });
           console.log('[ENRUTAMIENTO] 🚀 Alerta PRO enviada a la cola INMEDIATA.');
 
-          // 2. Usuario FREE: Castigo de 1 hora en la nevera de Redis (Producción)
+          // 2. Usuario FREE: Retraso de 1 hora
           const delay_ms = 3600000; 
           await notificationQueue.add('send-alert', { route, price, savings, userTier: 'FREE' }, { delay: delay_ms });
-          console.log(`[ENRUTAMIENTO] 🐌 Alerta FREE en la nevera. Penalización de ${delay_ms}ms aplicada en Redis.`);
+          console.log(`[ENRUTAMIENTO] 🐌 Alerta FREE penalizada con ${delay_ms}ms en Redis.`);
         }
 
       } else {
-        console.log('[WORKER] Misión fallida: No hubo captcha pero tampoco encontramos el precio.');
+        console.log('[WORKER] Misión fallida: No se capturó precio.');
       }
 
       await browser.close();
