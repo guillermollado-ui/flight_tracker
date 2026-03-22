@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import pool from './shared/utils/db';
 import redisConnection from './shared/utils/redis';
 import { flightQueue } from './queues/flightQueue';
-import './workers/flightWorker'; // Importamos el worker para que empiece a escuchar
+import './workers/flightWorker'; 
 
 dotenv.config();
 
@@ -18,7 +18,6 @@ app.get('/', (req: Request, res: Response) => {
   res.status(200).json({ status: 'online', message: 'Radar de Ineficiencias Aéreas operando.' });
 });
 
-// Ruta para inyectar un trabajo de prueba en la cola
 app.get('/test-job', async (req: Request, res: Response) => {
   try {
     const job = await flightQueue.add('search-flight', {
@@ -37,7 +36,22 @@ app.get('/test-job', async (req: Request, res: Response) => {
   }
 });
 
-// Health checks existentes
+// NUEVO: La mirilla a nuestra bóveda de PostgreSQL arreglada
+app.get('/api/prices', async (req: Request, res: Response) => {
+  try {
+    // Le pedimos absolutamente todo a la tabla sin filtros que la confundan
+    const result = await pool.query('SELECT * FROM price_history');
+    res.status(200).json({
+      status: 'success',
+      total_encontrados: result.rowCount,
+      botin: result.rows
+    });
+  } catch (error) {
+    console.error('[DB ERROR] Error al abrir la bóveda:', error);
+    res.status(500).json({ status: 'error', message: 'No se pudo acceder a los datos.' });
+  }
+});
+
 app.get('/health/db', async (req: Request, res: Response) => {
   const client = await pool.connect();
   const result = await client.query('SELECT NOW()');
