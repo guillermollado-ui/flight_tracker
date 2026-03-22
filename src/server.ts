@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import pool from './shared/utils/db';
 import redisConnection from './shared/utils/redis';
 import { flightQueue } from './queues/flightQueue';
+import { calculateDealScore } from './services/scoringservice'; // <-- CEREBRO IMPORTADO
 import './workers/flightWorker'; 
 import './workers/notificationWorker'; 
 import { startCronJobs } from './cron/flightCron'; 
@@ -23,6 +24,11 @@ app.get('/', (req: Request, res: Response) => {
 // RUTA DE EXPANSIÓN: Construye las nuevas tablas en la bóveda
 app.get('/api/setup-db', async (req: Request, res: Response) => {
   try {
+    // 🎯 NUEVO: Inyectamos la columna booking_url en la tabla existente
+    await pool.query(`
+      ALTER TABLE price_history ADD COLUMN IF NOT EXISTS booking_url TEXT;
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -48,7 +54,7 @@ app.get('/api/setup-db', async (req: Request, res: Response) => {
       ON CONFLICT (email) DO NOTHING;
     `);
 
-    res.status(200).json({ status: 'success', message: 'Bóveda expandida: Tablas de usuarios y alertas creadas.' });
+    res.status(200).json({ status: 'success', message: 'Bóveda expandida: Columna de URL añadida y tablas creadas.' });
   } catch (error) {
     console.error('[DB ERROR] Error al expandir la bóveda:', error);
     res.status(500).json({ status: 'error', message: 'No se pudo crear la estructura.' });
@@ -62,13 +68,25 @@ app.get('/api/radar', async (req: Request, res: Response) => {
     let radarCompleto = result.rows;
 
     // Si la base de datos está vacía o falla la lectura, mandamos datos de respaldo 
-    // para asegurar que Android recibe información y la pantalla no se queda en negro.
     if (!radarCompleto || radarCompleto.length === 0) {
         radarCompleto = [
-            { id: 1, route: "MAD -> JFK (New York)", price: 320.50, dealScore: 9.8, savings: 150.0, volatility: "BAJA" },
-            { id: 2, route: "BCN -> NRT (Tokyo)", price: 540.00, dealScore: 8.5, savings: 80.0, volatility: "MEDIA" },
-            { id: 3, route: "LGW -> BKK (Bangkok)", price: 410.20, dealScore: 9.2, savings: 210.0, volatility: "ALTA" }
+            { id: 1, route: "MAD -> JFK (New York)", price: 320.50, dealScore: 9.8, savings: 150.0, volatility: "BAJA", booking_url: "https://www.google.com/flights" },
+            { id: 2, route: "BCN -> NRT (Tokyo)", price: 540.00, dealScore: 8.5, savings: 80.0, volatility: "MEDIA", booking_url: "https://www.google.com/flights" },
+            { id: 3, route: "LGW -> BKK (Bangkok)", price: 410.20, dealScore: 9.2, savings: 210.0, volatility: "ALTA", booking_url: "https://www.google.com/flights" }
         ];
+    } else {
+        // 🎯 NUEVO: Procesamos con el Cerebro si hay datos reales
+        radarCompleto = await Promise.all(result.rows.map(async (item) => {
+          const metrics = await calculateDealScore(item.route, parseFloat(item.price));
+          return { 
+            ...item, 
+            dealScore: metrics.dealScore,
+            savings: metrics.savings,
+            volatility: metrics.volatility,
+            isChollo: metrics.isChollo,
+            arbitrage: metrics.arbitrage
+          };
+        }));
     }
 
     res.status(200).json({ status: 'success', radar: radarCompleto });
