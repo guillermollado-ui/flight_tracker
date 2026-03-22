@@ -1,12 +1,12 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import pool from './shared/utils/db';
-import redisConnection from './shared/utils/redis';
-import { flightQueue } from './queues/flightQueue';
-import './workers/flightWorker'; 
-import './workers/notificationWorker'; 
-import { startCronJobs } from './cron/flightCron'; 
+import pool from './shared/utils/db.js';
+import redisConnection from './shared/utils/redis.js';
+import { flightQueue } from './queues/flightQueue.js';
+import './workers/flightWorker.js'; 
+import './workers/notificationWorker.js'; 
+import { startCronJobs } from './cron/flightCron.js'; 
 
 dotenv.config();
 
@@ -70,6 +70,7 @@ app.get('/api/radar', async (req: Request, res: Response) => {
     res.status(500).json({ status: 'error', message: 'Error al cargar el Radar de élite.' });
   }
 });
+
 // 📱 ENDPOINT: Mis Alertas
 app.get('/api/alerts/:userId', async (req: Request, res: Response) => {
   try {
